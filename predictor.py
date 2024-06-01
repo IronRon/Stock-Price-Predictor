@@ -5,11 +5,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
 import matplotlib.pyplot as plt
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Setup argument parser
 parser = argparse.ArgumentParser(description='Run stock prediction model.')
 parser.add_argument('--evaluate', action='store_true', help='Evaluate the model')
+parser.add_argument('--compare', action='store_true', help='Compare today\'s prediction with actual closing price')
 args = parser.parse_args()
 
 
@@ -101,6 +102,11 @@ def predict_next_day(model, abbv_data):
     tomorrow_prediction = model.predict(X_new)
     predicted_price = tomorrow_prediction[0]
 
+    # Save prediction with a date stamp for tomorrow
+    tomorrow_date = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+    with open("today_prediction.txt", "w") as file:
+        file.write(f"{tomorrow_date},{predicted_price}\n")
+
     # Calculate the change from the last known price
     price_change = predicted_price - last_known_price
     price_change_percentage = (price_change / last_known_price) * 100
@@ -109,10 +115,35 @@ def predict_next_day(model, abbv_data):
     direction = "UP" if price_change > 0 else "DOWN"
 
     # Print the prediction and the additional information
-    print(f"Predicted Closing Price for Tomorrow: {predicted_price}")
+    print(f"Predicted Closing Price for Tomorrow ({tomorrow_date}): {predicted_price}")
     print(f"Expected change: {price_change:.2f} USD ({direction}), which is about {price_change_percentage:.2f}%")
 
+def compare_prediction_with_actual(stock_symbol):
+
+    # Fetch the predicted data
+    with open("today_prediction.txt", "r") as file:
+        prediction_data = file.read().strip().split(',')
+    predicted_date = prediction_data[0]
+    predicted_close = float(prediction_data[1])
+
+    # Download actual data for the predicted date
+    actual_data = yf.download(stock_symbol, start=predicted_date, end=predicted_date)
+
+    if not actual_data.empty:
+        actual_close = actual_data['Close'].iloc[-1]
+        print(f"Actual Closing Price for {predicted_date}: {actual_close}")
+        print(f"Predicted Closing Price was: {predicted_close}")
+
+        difference = actual_close - predicted_close
+        percentage_diff = (difference / predicted_close) * 100
+        print(f"Difference: {difference:.2f} USD, which is about {percentage_diff:.2f}%")
+    else:
+        print(f"\nNo trading data available for {predicted_date}.")
+
 # Main execution logic:
-data = download_data('ABBV')
-model, prepared_data = train_model(data)
-predict_next_day(model, prepared_data)
+if args.compare:
+    compare_prediction_with_actual('ABBV')
+else:
+    data = download_data('ABBV')
+    model, prepared_data = train_model(data)
+    predict_next_day(model, prepared_data)
