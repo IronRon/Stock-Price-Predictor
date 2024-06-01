@@ -74,3 +74,29 @@ plt.xlabel('Actual')
 plt.ylabel('Predicted')
 plt.title('Actual vs. Predicted Close Prices')
 plt.show()
+
+
+latest_data = abbv_data.iloc[-1]  # Get the most recent day's data
+last_known_price = latest_data['Close']
+
+# Prepare the input for prediction (reshape for a single sample)
+X_new = pd.DataFrame([[
+    latest_data['Close'],  # Previous_Close as today's Close
+    abbv_data['Close'].tail(7).mean(),  # 7day_MA from the last 7 days including today
+    (latest_data['Close'] / abbv_data.iloc[-2]['Close'] - 1)  # Daily_Change as today's change
+]], columns=['Previous_Close', '7day_MA', 'Daily_Change'])
+
+# Predict using the trained model
+tomorrow_prediction = model.predict(X_new)
+predicted_price = tomorrow_prediction[0]
+
+# Calculate the change from the last known price
+price_change = predicted_price - last_known_price
+price_change_percentage = (price_change / last_known_price) * 100
+
+# Determine the direction of the change
+direction = "UP" if price_change > 0 else "DOWN"
+
+# Print the prediction and the additional information
+print(f"Predicted Closing Price for Tomorrow: {predicted_price}")
+print(f"Expected change: {price_change:.2f} USD ({direction}), which is about {price_change_percentage:.2f}%")
