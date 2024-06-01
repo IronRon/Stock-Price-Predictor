@@ -1,3 +1,4 @@
+import argparse
 import yfinance as yf
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -6,13 +7,18 @@ from sklearn.metrics import mean_squared_error, r2_score
 import matplotlib.pyplot as plt
 from datetime import datetime
 
+# Setup argument parser
+parser = argparse.ArgumentParser(description='Run stock prediction model.')
+parser.add_argument('--evaluate', action='store_true', help='Evaluate the model')
+args = parser.parse_args()
+
 # Get today's date in the format 'YYYY-MM-DD'
 today_date = datetime.now().strftime('%Y-%m-%d')
 
 
 # Step 1: Data Collection
 abbv_data = yf.download('ABBV', start='2020-01-01', end=today_date)
-print(abbv_data.head())  # To see the first few rows of the data
+#print(abbv_data.head())  # To see the first few rows of the data
 #abbv_data.to_csv('ABBV_stock_data.csv')
 
 #plt.figure(figsize=(14, 7))
@@ -54,26 +60,26 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 model = LinearRegression()
 model.fit(X_train, y_train)
 
+if args.evaluate:
+    #Step 7: Making Predictions and Evaluating the Model
+    # Making predictions
+    predictions = model.predict(X_test)
 
-#Step 7: Making Predictions and Evaluating the Model
-# Making predictions
-predictions = model.predict(X_test)
-
-# Evaluating the model
-mse = mean_squared_error(y_test, predictions)
-r2 = r2_score(y_test, predictions)
-print(f"Mean Squared Error: {mse}")
-print(f"R^2 Score: {r2}")
+    # Evaluating the model
+    mse = mean_squared_error(y_test, predictions)
+    r2 = r2_score(y_test, predictions)
+    print(f"Mean Squared Error: {mse}")
+    print(f"R^2 Score: {r2}")
 
 
-#Step 8: Visualization
-plt.figure(figsize=(10, 10))
-plt.scatter(y_test, predictions, alpha=0.5)
-plt.plot([y.min(), y.max()], [y.min(), y.max()], 'k--', lw=4)  # Diagonal line indicating perfect predictions
-plt.xlabel('Actual')
-plt.ylabel('Predicted')
-plt.title('Actual vs. Predicted Close Prices')
-plt.show()
+    #Step 8: Visualization
+    plt.figure(figsize=(10, 10))
+    plt.scatter(y_test, predictions, alpha=0.5)
+    plt.plot([y.min(), y.max()], [y.min(), y.max()], 'k--', lw=4)  # Diagonal line indicating perfect predictions
+    plt.xlabel('Actual')
+    plt.ylabel('Predicted')
+    plt.title('Actual vs. Predicted Close Prices')
+    plt.show()
 
 
 latest_data = abbv_data.iloc[-1]  # Get the most recent day's data
