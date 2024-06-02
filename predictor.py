@@ -76,8 +76,8 @@ def train_model(abbv_data, evaluate):
         # Evaluating the model
         mse = mean_squared_error(y_test, predictions)
         r2 = r2_score(y_test, predictions)
-        print(f"Mean Squared Error: {mse}")
-        print(f"R^2 Score: {r2}")
+        #print(f"Mean Squared Error: {mse}")
+        #print(f"R^2 Score: {r2}")
 
 
         #Step 8: Visualization
@@ -87,9 +87,13 @@ def train_model(abbv_data, evaluate):
         plt.xlabel('Actual')
         plt.ylabel('Predicted')
         plt.title('Actual vs. Predicted Close Prices')
-        plt.show()
+        #plt.show()
 
-        return model, abbv_data
+        # Save the plot
+        plt.savefig('plot.png')
+        plt.close()  # Close the plot to free up memory
+
+        return mse, r2  # Return the evaluation metrics
     else:
         X_train, y_train = X[:-1], y[:-1]  # Use all data except the latest point for training
 
@@ -256,14 +260,34 @@ async def compare(ctx, symbol: str):
         await ctx.send("No comparison results to display.")
 
 @bot.command()
-async def maintain(ctx):
+async def maintain(ctx, max_lines=30):
     """Maintain the size of the prediction log CSV file."""
-    result = maintain_csv_size("prediction_log.csv", max_lines=30)
+    result = maintain_csv_size("prediction_log.csv", max_lines)
     embed = discord.Embed(title="CSV Maintenance Report", description="Maintenance operations completed on prediction log CSV file.", color=0x3498db)
     embed.add_field(name="Result", value=result, inline=False)
     embed.set_footer(text="Maintenance executed successfully.")
 
     await ctx.send(embed=embed)
+
+@bot.command()
+async def evaluate(ctx, symbol):
+    data = download_data(symbol)
+    mse, r2 = train_model(data, True)  # Capture the returned values
+
+    # Create an embed object for the response
+    embed = discord.Embed(
+        title="Model Evaluation Results",
+        description=f"Results for the symbol: **{symbol.upper()}**",
+        color=discord.Color.blue()  # You can choose any appropriate color
+    )
+    embed.add_field(name="Mean Squared Error (MSE)", value=f"`{mse:.4f}`", inline=False)
+    embed.add_field(name="R² Score", value=f"`{r2:.4f}`", inline=False)
+    embed.set_footer(text="Model evaluation completed")
+
+    # Send the plot and the embed message to the Discord channel
+    with open('plot.png', 'rb') as f:
+        picture = discord.File(f)
+        await ctx.send(file=picture, embed=embed)
 
 # Main execution logic:
 #if args.compare:
@@ -276,4 +300,4 @@ async def maintain(ctx):
 #    model, prepared_data = train_model(data, args.evaluate)
 #    predict_next_day(model, prepared_data)
 
-bot.run('DISCORD-BOT-SECRET-code')
+bot.run('Your Bot Code number Thing')
