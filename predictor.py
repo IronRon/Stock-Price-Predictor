@@ -6,11 +6,13 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
+import os
 
 # Setup argument parser
 parser = argparse.ArgumentParser(description='Run stock prediction model.')
 parser.add_argument('--evaluate', action='store_true', help='Evaluate the model')
 parser.add_argument('--compare', action='store_true', help='Compare today\'s prediction with actual closing price')
+parser.add_argument('--maintain_csv', action='store_true', help='If specified, limits the CSV file to the last 30 entries to prevent it from growing too large.')
 args = parser.parse_args()
 
 
@@ -162,9 +164,32 @@ def compare_prediction_with_actual(stock_symbol):
         else:
             print(f"No trading data available for {predicted_date}.")
 
+
+def maintain_csv_size(filepath, max_lines=30):
+    # Check if the file exists
+    if not os.path.exists(filepath):
+        print(f"File not found: {filepath}")
+        return
+
+    # Read the current content of the file
+    with open(filepath, 'r') as file:
+        lines = file.readlines()
+
+    # Check if the file exceeds the maximum allowed lines
+    if len(lines) > max_lines:
+        # Keep only the last max_lines entries
+        with open(filepath, 'w') as file:
+            file.writelines(lines[-max_lines:])
+        print(f"File exceeds the maximum allowed lines. Removed old entries...")
+    else:
+        print(f"File is chilling.")
+
 # Main execution logic:
 if args.compare:
     compare_prediction_with_actual('ABBV')
+elif args.maintain_csv:
+    # Call the function to maintain the size of the CSV file
+    maintain_csv_size("prediction_log.csv", max_lines=30)
 else:
     data = download_data('ABBV')
     model, prepared_data = train_model(data)
