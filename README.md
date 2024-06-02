@@ -26,18 +26,18 @@ This Python-based project employs machine learning techniques—specifically lin
 ## Usage
 The script can be run in two modes: normal and evaluation.
 - **Normal Mode:** This mode will run the script to fetch the latest stock data, train the model, and predict the next day’s closing price without evaluating the model. 
- ```bash
+  ```bash
   python stock_prediction.py
- ```
+  ```
 - **Evaluation Mode:** This mode includes all the steps in the normal mode and also evaluates the model's performance and visualizes the results. 
   ```bash
-   python stock_prediction.py --evaluate
+  python stock_prediction.py --evaluate
   ```
 - **Comparison Mode:** Compares the predicted prices with actual closing prices on the corresponding dates. 
-```bash
+  ```bash
   python stock_prediction.py --compare
- ```
+  ```
 - **CSV Maintenance Mode:** Manages the size of the prediction log file by ensuring it does not exceed 30 entries.
   ```bash
   python stock_prediction.py --maintain_csv
- ```
+  ```
