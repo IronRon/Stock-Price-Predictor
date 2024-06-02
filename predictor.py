@@ -7,13 +7,23 @@ from sklearn.metrics import mean_squared_error, r2_score
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 import os
+import io
+import sys
+import discord
+from discord.ext import commands
+
+# Initialize bot
+intents = discord.Intents.default()
+intents.message_content = True
+
+bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Setup argument parser
-parser = argparse.ArgumentParser(description='Run stock prediction model.')
-parser.add_argument('--evaluate', action='store_true', help='Evaluate the model')
-parser.add_argument('--compare', action='store_true', help='Compare today\'s prediction with actual closing price')
-parser.add_argument('--maintain_csv', action='store_true', help='If specified, limits the CSV file to the last 30 entries to prevent it from growing too large.')
-args = parser.parse_args()
+#parser = argparse.ArgumentParser(description='Run stock prediction model.')
+#parser.add_argument('--evaluate', action='store_true', help='Evaluate the model')
+#parser.add_argument('--compare', action='store_true', help='Compare today\'s prediction with actual closing price')
+#parser.add_argument('--maintain_csv', action='store_true', help='If specified, limits the CSV file to the last 30 entries to prevent it from growing too large.')
+#args = parser.parse_args()
 
 
 def download_data(stock_symbol):
@@ -32,7 +42,7 @@ def download_data(stock_symbol):
     #plt.ylabel('Closing Price (USD)')
     #plt.show()
 
-def train_model(abbv_data):
+def train_model(abbv_data, evaluate):
     # Step 2: Data Preprocessing
     abbv_data['Previous_Close'] = abbv_data['Close'].shift(1)
 
@@ -52,7 +62,7 @@ def train_model(abbv_data):
     y = abbv_data['Close']
     # Splitting the data into train and test sets
 
-    if args.evaluate:
+    if evaluate:
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         #Step 6: Model Training
         # Creating and training the linear regression model
@@ -90,6 +100,10 @@ def train_model(abbv_data):
         return model, abbv_data
 
 def predict_next_day(model, abbv_data):
+     # Create a string buffer
+    output = io.StringIO()
+    sys.stdout = output  # Redirect stdout to the buffer
+
     latest_data = abbv_data.iloc[-1]  # Get the most recent day's data
     last_known_price = latest_data['Close']
 
@@ -129,7 +143,12 @@ def predict_next_day(model, abbv_data):
     print(f"Predicted Closing Price for Tomorrow ({tomorrow_date}): {predicted_price}")
     print(f"Expected change: {price_change:.2f} USD ({direction}), which is about {price_change_percentage:.2f}%")
 
+    sys.stdout = sys.__stdout__  # Reset stdout
+    return predicted_price, output.getvalue()
+
 def compare_prediction_with_actual(stock_symbol):
+    output = io.StringIO()
+    sys.stdout = output  # Redirect stdout to the buffer
 
     # Fetch the predicted data
     try:
@@ -137,7 +156,8 @@ def compare_prediction_with_actual(stock_symbol):
             predictions = file.readlines()
     except FileNotFoundError:
         print("No predictions found.")
-        return
+        sys.stdout = sys.__stdout__  # Reset stdout before returning
+        return output.getvalue()
 
     for line in predictions:
         predicted_date, predicted_close = line.strip().split(',')
@@ -156,20 +176,29 @@ def compare_prediction_with_actual(stock_symbol):
         if not actual_data.empty:
             actual_close = actual_data['Close'].iloc[-1]
             print(f"Actual Closing Price for {predicted_date}: {actual_close}")
-            print(f"Predicted Closing Price was: {predicted_close}")
+            print(f"Predicted Closing Price for {predicted_date} was: {predicted_close}")
 
             difference = actual_close - predicted_close
             percentage_diff = (difference / predicted_close) * 100
-            print(f"Difference: {difference:.2f} USD, which is about {percentage_diff:.2f}%")
+            print(f"Difference {predicted_date}: {difference:.2f} USD, which is about {percentage_diff:.2f}%")
         else:
             print(f"No trading data available for {predicted_date}.")
 
+    sys.stdout = sys.__stdout__  # Reset stdout
+    return output.getvalue()
+
+
 
 def maintain_csv_size(filepath, max_lines=30):
+    # Create a string buffer
+    output = io.StringIO()
+    sys.stdout = output  # Redirect stdout to the buffer
+
     # Check if the file exists
     if not os.path.exists(filepath):
         print(f"File not found: {filepath}")
-        return
+        sys.stdout = sys.__stdout__  # Reset stdout
+        return output.getvalue()
 
     # Read the current content of the file
     with open(filepath, 'r') as file:
@@ -183,14 +212,68 @@ def maintain_csv_size(filepath, max_lines=30):
         print(f"File exceeds the maximum allowed lines. Removed old entries...")
     else:
         print(f"File is chilling.")
+    
+    sys.stdout = sys.__stdout__  # Reset stdout
+    return output.getvalue()
+
+@bot.command()
+async def predict(ctx, symbol: str):
+    """Predicts the next day closing price for a given stock symbol."""
+    data = download_data(symbol)
+    model, prepared_data = train_model(data, False)
+    predicted_price, analysis  = predict_next_day(model, prepared_data)
+    embed = discord.Embed(title=f"Prediction for {symbol}", color=0x00ff00)
+    embed.add_field(name="Predicted Closing Price", value=f"${predicted_price:.2f}", inline=False)
+    embed.add_field(name="Details", value=analysis, inline=False)
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def compare(ctx, symbol: str):
+    """Compares the predicted with the actual closing price."""
+    comparison_results = compare_prediction_with_actual(symbol)
+    if comparison_results:
+        # Split the results into lines for better formatting within fields
+        results_lines = comparison_results.split('\n')
+        
+        # Create an embed object for response
+        embed = discord.Embed(title=f"Comparison Results for {symbol}", description="Here are the price comparisons between predicted and actual closing prices:", color=0x3498db)
+        
+        # Add fields dynamically based on content length
+        for line in results_lines:
+            if line:  # Avoid adding empty lines
+                # Safely split the line and handle lines without a colon
+                parts = line.split(':')
+                if len(parts) == 2:
+                    field_name, field_value = parts
+                    embed.add_field(name=field_name.strip(), value=field_value.strip(), inline=False)
+                else:
+                    # Handle lines without a colon by adding them as a generic field
+                    embed.add_field(name="Notice", value=line, inline=False)
+        
+        # Send the embed
+        await ctx.send(embed=embed)
+    else:
+        await ctx.send("No comparison results to display.")
+
+@bot.command()
+async def maintain(ctx):
+    """Maintain the size of the prediction log CSV file."""
+    result = maintain_csv_size("prediction_log.csv", max_lines=30)
+    embed = discord.Embed(title="CSV Maintenance Report", description="Maintenance operations completed on prediction log CSV file.", color=0x3498db)
+    embed.add_field(name="Result", value=result, inline=False)
+    embed.set_footer(text="Maintenance executed successfully.")
+
+    await ctx.send(embed=embed)
 
 # Main execution logic:
-if args.compare:
-    compare_prediction_with_actual('ABBV')
-elif args.maintain_csv:
-    # Call the function to maintain the size of the CSV file
-    maintain_csv_size("prediction_log.csv", max_lines=30)
-else:
-    data = download_data('ABBV')
-    model, prepared_data = train_model(data)
-    predict_next_day(model, prepared_data)
+#if args.compare:
+#    compare_prediction_with_actual('ABBV')
+#elif args.maintain_csv:
+#    # Call the function to maintain the size of the CSV file
+#    maintain_csv_size("prediction_log.csv", max_lines=30)
+#else:
+#    data = download_data('ABBV')
+#    model, prepared_data = train_model(data, args.evaluate)
+#    predict_next_day(model, prepared_data)
+
+bot.run('DISCORD-BOT-SECRET-code')
