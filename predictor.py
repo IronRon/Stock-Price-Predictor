@@ -99,13 +99,22 @@ def predict_next_day(model, abbv_data):
     ]], columns=['Previous_Close', '7day_MA', 'Daily_Change'])
 
     # Predict using the trained model
-    tomorrow_prediction = model.predict(X_new)
-    predicted_price = tomorrow_prediction[0]
-
+    predicted_price = model.predict(X_new)[0]
     # Save prediction with a date stamp for tomorrow
     tomorrow_date = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
-    with open("today_prediction.txt", "w") as file:
-        file.write(f"{tomorrow_date},{predicted_price}\n")
+
+    # Check if the prediction for the current day already exists
+    try:
+        with open("prediction_log.csv", "r") as file:
+            existing_predictions = file.readlines()
+    except FileNotFoundError:
+        existing_predictions = []
+
+    # Check if there's already an entry for tomorrow's date
+    if not any(tomorrow_date in prediction for prediction in existing_predictions):
+        with open("prediction_log.csv", "a") as file:
+            file.write(f"{tomorrow_date},{predicted_price}\n")
+
 
     # Calculate the change from the last known price
     price_change = predicted_price - last_known_price
@@ -121,24 +130,37 @@ def predict_next_day(model, abbv_data):
 def compare_prediction_with_actual(stock_symbol):
 
     # Fetch the predicted data
-    with open("today_prediction.txt", "r") as file:
-        prediction_data = file.read().strip().split(',')
-    predicted_date = prediction_data[0]
-    predicted_close = float(prediction_data[1])
+    try:
+        with open("prediction_log.csv", "r") as file:
+            predictions = file.readlines()
+    except FileNotFoundError:
+        print("No predictions found.")
+        return
 
-    # Download actual data for the predicted date
-    actual_data = yf.download(stock_symbol, start=predicted_date, end=predicted_date)
+    for line in predictions:
+        predicted_date, predicted_close = line.strip().split(',')
+        predicted_close = float(predicted_close)
 
-    if not actual_data.empty:
-        actual_close = actual_data['Close'].iloc[-1]
-        print(f"Actual Closing Price for {predicted_date}: {actual_close}")
-        print(f"Predicted Closing Price was: {predicted_close}")
+        # Set the end date to one day after the start date
+        start_date = datetime.strptime(predicted_date, '%Y-%m-%d')
+        end_date = start_date + timedelta(days=1) # end date is exclusive
 
-        difference = actual_close - predicted_close
-        percentage_diff = (difference / predicted_close) * 100
-        print(f"Difference: {difference:.2f} USD, which is about {percentage_diff:.2f}%")
-    else:
-        print(f"\nNo trading data available for {predicted_date}.")
+        # Format dates back to string for the yf.download function
+        start_date_str = start_date.strftime('%Y-%m-%d')
+        end_date_str = end_date.strftime('%Y-%m-%d')
+
+        # Fetch actual data for the predicted date
+        actual_data = yf.download(stock_symbol, start=start_date_str, end=end_date_str)
+        if not actual_data.empty:
+            actual_close = actual_data['Close'].iloc[-1]
+            print(f"Actual Closing Price for {predicted_date}: {actual_close}")
+            print(f"Predicted Closing Price was: {predicted_close}")
+
+            difference = actual_close - predicted_close
+            percentage_diff = (difference / predicted_close) * 100
+            print(f"Difference: {difference:.2f} USD, which is about {percentage_diff:.2f}%")
+        else:
+            print(f"No trading data available for {predicted_date}.")
 
 # Main execution logic:
 if args.compare:
