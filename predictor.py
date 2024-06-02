@@ -103,7 +103,7 @@ def train_model(abbv_data, evaluate):
         model.fit(X_train, y_train)
         return model, abbv_data
 
-def predict_next_day(model, abbv_data):
+def predict_next_day(model, abbv_data, stock_symbol):
      # Create a string buffer
     output = io.StringIO()
     sys.stdout = output  # Redirect stdout to the buffer
@@ -123,17 +123,35 @@ def predict_next_day(model, abbv_data):
     # Save prediction with a date stamp for tomorrow
     tomorrow_date = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
 
-    # Check if the prediction for the current day already exists
+    # Reading and writing to the CSV with updated structure
     try:
-        with open("prediction_log.csv", "r") as file:
-            existing_predictions = file.readlines()
+        predictions = pd.read_csv("prediction_log.csv")
     except FileNotFoundError:
-        existing_predictions = []
+        predictions = pd.DataFrame(columns=["Symbol", "Date", "Predicted_Close"])
 
-    # Check if there's already an entry for tomorrow's date
-    if not any(tomorrow_date in prediction for prediction in existing_predictions):
-        with open("prediction_log.csv", "a") as file:
-            file.write(f"{tomorrow_date},{predicted_price}\n")
+    # Ensure that predictions DataFrame has the necessary columns
+    required_columns = ['Symbol', 'Date', 'Predicted_Close']
+    for column in required_columns:
+        if column not in predictions.columns:
+            predictions[column] = pd.NA  # Initialize missing columns with NA
+
+    if not ((predictions['Date'] == tomorrow_date) & (predictions['Symbol'] == stock_symbol)).any():
+        # Create a new DataFrame for the row to be added
+        new_row = pd.DataFrame({
+            "Symbol": [stock_symbol],
+            "Date": [tomorrow_date],
+            "Predicted_Close": [predicted_price]
+        })
+
+        # Append new row using concat
+        predictions = pd.concat([predictions, new_row], ignore_index=True)
+
+        # Write to CSV, replacing or appending based on file existence
+        if not os.path.exists("prediction_log.csv"):
+            predictions.to_csv("prediction_log.csv", index=False)
+        else:
+            # Since we are appending to the CSV, we need to ensure only the new row is appended if file exists
+            new_row.to_csv("prediction_log.csv", mode='a', header=False, index=False)
 
 
     # Calculate the change from the last known price
@@ -156,16 +174,15 @@ def compare_prediction_with_actual(stock_symbol):
 
     # Fetch the predicted data
     try:
-        with open("prediction_log.csv", "r") as file:
-            predictions = file.readlines()
+        predictions = pd.read_csv("prediction_log.csv")
+        predictions = predictions[predictions['Symbol'] == stock_symbol]
     except FileNotFoundError:
         print("No predictions found.")
         sys.stdout = sys.__stdout__  # Reset stdout before returning
         return output.getvalue()
 
-    for line in predictions:
-        predicted_date, predicted_close = line.strip().split(',')
-        predicted_close = float(predicted_close)
+    for _, row in predictions.iterrows():
+        predicted_date, predicted_close = row['Date'], row['Predicted_Close']
 
         # Set the end date to one day after the start date
         start_date = datetime.strptime(predicted_date, '%Y-%m-%d')
@@ -192,8 +209,7 @@ def compare_prediction_with_actual(stock_symbol):
     return output.getvalue()
 
 
-
-def maintain_csv_size(filepath, max_lines=30):
+def maintain_csv_size(filepath, max_entries=30):
     # Create a string buffer
     output = io.StringIO()
     sys.stdout = output  # Redirect stdout to the buffer
@@ -203,19 +219,21 @@ def maintain_csv_size(filepath, max_lines=30):
         print(f"File not found: {filepath}")
         sys.stdout = sys.__stdout__  # Reset stdout
         return output.getvalue()
+    
+    # Read the current content of the file into a DataFrame
+    df = pd.read_csv(filepath)
 
-    # Read the current content of the file
-    with open(filepath, 'r') as file:
-        lines = file.readlines()
+    # Process each symbol to limit entries
+    result_df = pd.DataFrame()
+    for symbol in df['Symbol'].unique():
+        # Filter the dataframe by symbol and keep only the last max_entries entries
+        symbol_df = df[df['Symbol'] == symbol]
+        trimmed_df = symbol_df.tail(max_entries)
+        result_df = pd.concat([result_df, trimmed_df], ignore_index=True)
 
-    # Check if the file exceeds the maximum allowed lines
-    if len(lines) > max_lines:
-        # Keep only the last max_lines entries
-        with open(filepath, 'w') as file:
-            file.writelines(lines[-max_lines:])
-        print(f"File exceeds the maximum allowed lines. Removed old entries...")
-    else:
-        print(f"File is chilling.")
+    # Write the modified DataFrame back to the file
+    result_df.to_csv(filepath, index=False)
+    print(f"CSV file has been trimmed to the last {max_entries} entries for each stock.")
     
     sys.stdout = sys.__stdout__  # Reset stdout
     return output.getvalue()
@@ -225,7 +243,7 @@ async def predict(ctx, symbol: str):
     """Predicts the next day closing price for a given stock symbol."""
     data = download_data(symbol)
     model, prepared_data = train_model(data, False)
-    predicted_price, analysis  = predict_next_day(model, prepared_data)
+    predicted_price, analysis  = predict_next_day(model, prepared_data, symbol)
     embed = discord.Embed(title=f"Prediction for {symbol}", color=0x00ff00)
     embed.add_field(name="Predicted Closing Price", value=f"${predicted_price:.2f}", inline=False)
     embed.add_field(name="Details", value=analysis, inline=False)
@@ -260,9 +278,9 @@ async def compare(ctx, symbol: str):
         await ctx.send("No comparison results to display.")
 
 @bot.command()
-async def maintain(ctx, max_lines=30):
+async def maintain(ctx, max_entries=10):
     """Maintain the size of the prediction log CSV file."""
-    result = maintain_csv_size("prediction_log.csv", max_lines)
+    result = maintain_csv_size("prediction_log.csv", max_entries)
     embed = discord.Embed(title="CSV Maintenance Report", description="Maintenance operations completed on prediction log CSV file.", color=0x3498db)
     embed.add_field(name="Result", value=result, inline=False)
     embed.set_footer(text="Maintenance executed successfully.")
@@ -300,4 +318,4 @@ async def evaluate(ctx, symbol):
 #    model, prepared_data = train_model(data, args.evaluate)
 #    predict_next_day(model, prepared_data)
 
-bot.run('Your Bot Code number Thing')
+bot.run('YOUR-BOT-DISCORD-CODE')
