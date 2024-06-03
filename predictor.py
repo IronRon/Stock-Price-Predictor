@@ -30,7 +30,12 @@ def download_data(stock_symbol):
     # Get today's date in the format 'YYYY-MM-DD'
     today_date = datetime.now().strftime('%Y-%m-%d')
     # Step 1: Data Collection
-    return yf.download(stock_symbol, start='2020-01-01', end=today_date)
+    try:
+        data = yf.download(stock_symbol, start='2020-01-01', end=today_date)
+        return data
+    except Exception as e:
+        print(f"Failed to download data for {stock_symbol}: {e}")
+        return None
 
     #print(abbv_data.head())  # To see the first few rows of the data
     #abbv_data.to_csv('ABBV_stock_data.csv')
@@ -193,7 +198,13 @@ def compare_prediction_with_actual(stock_symbol):
         end_date_str = end_date.strftime('%Y-%m-%d')
 
         # Fetch actual data for the predicted date
-        actual_data = yf.download(stock_symbol, start=start_date_str, end=end_date_str)
+        try:
+            actual_data = yf.download(stock_symbol, start=start_date_str, end=end_date_str)
+        except Exception as e:
+            print(f"Failed to download data for {stock_symbol}: {e}")
+            sys.stdout = sys.__stdout__  # Reset stdout before returning
+            return output.getvalue()
+        
         if not actual_data.empty:
             actual_close = actual_data['Close'].iloc[-1]
             print(f"Actual Closing Price for {predicted_date}: {actual_close}")
@@ -318,4 +329,4 @@ async def evaluate(ctx, symbol):
 #    model, prepared_data = train_model(data, args.evaluate)
 #    predict_next_day(model, prepared_data)
 
-bot.run('YOUR-BOT-DISCORD-CODE')
+bot.run('YOUR-Bot-Code')
