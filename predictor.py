@@ -11,6 +11,17 @@ import io
 import sys
 import discord
 from discord.ext import commands
+import pandas_market_calendars as mcal
+from pandas.tseries.holiday import AbstractHolidayCalendar
+from pandas import date_range
+from pandas import Timestamp
+
+class AlwaysOpenCalendar(AbstractHolidayCalendar):
+    rules = []
+
+    def valid_days(self, start_date, end_date):
+        # Returns every day between start_date and end_date inclusive
+        return date_range(start=start_date, end=end_date, freq='D')
 
 # Initialize bot
 intents = discord.Intents.default()
@@ -109,9 +120,17 @@ def train_model(abbv_data, evaluate):
         return model, abbv_data
 
 def predict_next_day(model, abbv_data, stock_symbol):
-     # Create a string buffer
+    # Create a string buffer
     output = io.StringIO()
     sys.stdout = output  # Redirect stdout to the buffer
+
+    # Get exchange and calendar for the stock
+    exchange, asset_type = get_ticker_info(stock_symbol)
+    calendar = get_calendar_by_exchange(exchange, asset_type)
+
+    # Determine the next valid trading day
+    today = datetime.now()
+    next_trading_day = get_next_trading_day(today, calendar)
 
     latest_data = abbv_data.iloc[-1]  # Get the most recent day's data
     last_known_price = latest_data['Close']
@@ -126,12 +145,13 @@ def predict_next_day(model, abbv_data, stock_symbol):
     # Predict using the trained model
     predicted_price = model.predict(X_new)[0]
     # Save prediction with a date stamp for tomorrow
-    tomorrow_date = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+    #tomorrow_date = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
 
     # Reading and writing to the CSV with updated structure
-    try:
-        predictions = pd.read_csv("prediction_log.csv")
-    except FileNotFoundError:
+    log_filename = "prediction_log.csv"
+    if os.path.exists(log_filename):
+        predictions = pd.read_csv(log_filename)
+    else:
         predictions = pd.DataFrame(columns=["Symbol", "Date", "Predicted_Close"])
 
     # Ensure that predictions DataFrame has the necessary columns
@@ -140,11 +160,11 @@ def predict_next_day(model, abbv_data, stock_symbol):
         if column not in predictions.columns:
             predictions[column] = pd.NA  # Initialize missing columns with NA
 
-    if not ((predictions['Date'] == tomorrow_date) & (predictions['Symbol'] == stock_symbol)).any():
+    if not ((predictions['Date'] == next_trading_day.strftime('%Y-%m-%d')) & (predictions['Symbol'] == stock_symbol)).any():
         # Create a new DataFrame for the row to be added
         new_row = pd.DataFrame({
             "Symbol": [stock_symbol],
-            "Date": [tomorrow_date],
+            "Date": [next_trading_day.strftime('%Y-%m-%d')],
             "Predicted_Close": [predicted_price]
         })
 
@@ -158,7 +178,6 @@ def predict_next_day(model, abbv_data, stock_symbol):
             # Since we are appending to the CSV, we need to ensure only the new row is appended if file exists
             new_row.to_csv("prediction_log.csv", mode='a', header=False, index=False)
 
-
     # Calculate the change from the last known price
     price_change = predicted_price - last_known_price
     price_change_percentage = (price_change / last_known_price) * 100
@@ -167,7 +186,7 @@ def predict_next_day(model, abbv_data, stock_symbol):
     direction = "UP" if price_change > 0 else "DOWN"
 
     # Print the prediction and the additional information
-    print(f"Predicted Closing Price for Tomorrow ({tomorrow_date}): {predicted_price}")
+    print(f"Predicted Closing Price for Next Trading Day ({next_trading_day.strftime('%Y-%m-%d')}): {predicted_price}")
     print(f"Expected change: {price_change:.2f} USD ({direction}), which is about {price_change_percentage:.2f}%")
 
     sys.stdout = sys.__stdout__  # Reset stdout
@@ -249,6 +268,55 @@ def maintain_csv_size(filepath, max_entries=30):
     sys.stdout = sys.__stdout__  # Reset stdout
     return output.getvalue()
 
+
+def get_next_trading_day(current_date, calendar):
+    # Make sure current_date is a Timestamp for consistency
+    if not isinstance(current_date, Timestamp):
+        current_date = Timestamp(current_date)
+
+    valid_days = calendar.valid_days(start_date=current_date, end_date=current_date + timedelta(days=30))
+    for day in valid_days:
+        if day.date() > current_date.date():
+            return day
+    return None
+
+        
+def get_ticker_info(ticker):
+    stock = yf.Ticker(ticker)
+    # Fetch stock info
+    info = stock.info
+    # Get the 'exchange' attribute
+    exchange = info.get('exchange')
+    asset_type = info.get('quoteType', None)
+    print(f"{ticker} is traded on: {exchange}")
+    print(f"The asset {ticker} is a {asset_type}.")
+    return exchange, asset_type
+
+
+def get_calendar_by_exchange(exchange, asset_type):
+    # Mapping of common exchange identifiers from yfinance to market calendars
+    exchange_to_calendar = {
+        'NMS': 'NASDAQ',   # Nasdaq
+        'NYQ': 'NYSE',     # New York Stock Exchange
+        'ASE': 'NYSE',     # NYSE American (formerly AMEX)
+        'NYS': 'NYSE',     # NYSE
+        'LSE': 'LSE',      # London Stock Exchange
+        '24_7': AlwaysOpenCalendar(),  # For cryptocurrencies
+        # add more mappings as necessary
+    }
+
+    if asset_type.lower() == 'cryptocurrency':
+        return AlwaysOpenCalendar()
+    else:
+        calendar_name = exchange_to_calendar.get(exchange, '24_7')
+        if isinstance(calendar_name, AbstractHolidayCalendar):
+            return calendar_name
+        elif calendar_name in mcal.get_calendar_names():
+            return mcal.get_calendar(calendar_name)
+        else:
+            return AlwaysOpenCalendar()  # Default to 24/7 if no matching calendar
+
+
 @bot.command()
 async def predict(ctx, symbol: str):
     """Predicts the next day closing price for a given stock symbol."""
@@ -329,4 +397,4 @@ async def evaluate(ctx, symbol):
 #    model, prepared_data = train_model(data, args.evaluate)
 #    predict_next_day(model, prepared_data)
 
-bot.run('YOUR-Bot-Code')
+bot.run('YOUR-BOT-CODE')
