@@ -386,6 +386,44 @@ async def evaluate(ctx, symbol):
         picture = discord.File(f)
         await ctx.send(file=picture, embed=embed)
 
+@bot.command()
+async def info(ctx):
+    """Provides information about the bot and usage instructions."""
+    # Create an embed object for the response
+    embed = discord.Embed(
+        title="Bot Information and Usage Guide",
+        description="This bot provides advanced stock market analysis features. Below are the commands you can use:",
+        color=discord.Color.gold()  # Setting a gold color for the embed
+    )
+
+    # Adding fields for each command with a brief description
+    embed.add_field(
+        name="!predict [symbol]",
+        value="Predicts the next day's closing price for the specified stock symbol. Example: `@predict AAPL`",
+        inline=False
+    )
+    embed.add_field(
+        name="!compare [symbol]",
+        value="Compares the predicted and actual closing prices for the specified stock symbol. Example: `@compare AAPL`",
+        inline=False
+    )
+    embed.add_field(
+        name="!maintain [max_entries]",
+        value="Maintains the size of the prediction log to ensure it doesn't exceed the specified maximum entries. Default is 10. Example: `@maintain 15`",
+        inline=False
+    )
+    embed.add_field(
+        name="!evaluate [symbol]",
+        value="Evaluates the prediction model using the specified stock symbol, providing model accuracy metrics like MSE and R² Score. Example: `@evaluate AAPL`",
+        inline=False
+    )
+
+    # Adding a footer for additional context or help
+    embed.set_footer(text="For more details, visit https://github.com/IronRon/Stock-Price-Predictor/tree/discord-bot-feature")
+
+    # Send the embed message to the Discord channel
+    await ctx.send(embed=embed)
+
 # Main execution logic:
 #if args.compare:
 #    compare_prediction_with_actual('ABBV')
