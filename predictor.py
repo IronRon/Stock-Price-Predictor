@@ -15,6 +15,12 @@ import pandas_market_calendars as mcal
 from pandas.tseries.holiday import AbstractHolidayCalendar
 from pandas import date_range
 from pandas import Timestamp
+import configparser
+
+config = configparser.ConfigParser()
+config.read('config.ini')
+
+discord_token = config['DEFAULT']['DiscordToken']
 
 class AlwaysOpenCalendar(AbstractHolidayCalendar):
     rules = []
@@ -285,11 +291,13 @@ def get_ticker_info(ticker):
     stock = yf.Ticker(ticker)
     # Fetch stock info
     info = stock.info
-    # Get the 'exchange' attribute
+
     exchange = info.get('exchange')
     asset_type = info.get('quoteType', None)
+
     print(f"{ticker} is traded on: {exchange}")
     print(f"The asset {ticker} is a {asset_type}.")
+
     return exchange, asset_type
 
 
@@ -435,4 +443,4 @@ async def info(ctx):
 #    model, prepared_data = train_model(data, args.evaluate)
 #    predict_next_day(model, prepared_data)
 
-bot.run('YOUR-BOT-CODE')
+bot.run(discord_token)
